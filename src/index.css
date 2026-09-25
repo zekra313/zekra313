@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+:root {
+  --primary-color: #1e3a2b;       /* Deep Forest Emerald / Elegant Arabic Print Shop */
+  --secondary-color: #b4914c;     /* Luxury Warm Gold / Brass */
+  --accent-color: #d97706;        /* Warm Amber */
+  --bg-color: #fafaf9;            /* Refined Stone Alabaster */
+  --text-color: #1c1917;          /* Deep Stone */
+  --btn-color: #1e3a2b;           /* Primary button tone */
+  --btn-text: #ffffff;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1ef;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
+}
+
+/* Print styles for digital invoice */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-invoice, #printable-invoice * {
+    visibility: visible;
+  }
+  #printable-invoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
