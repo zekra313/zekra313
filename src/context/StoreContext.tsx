@@ -33,6 +33,13 @@ import {
   verifyAdminEmailInSupabase,
   signInWithGoogleOAuth
 } from '../lib/supabase';
+import { uploadImageToCloudStorage } from '../utils/imageCompressor';
+import {
+  createBackupSnapshot,
+  downloadBackupAsFile,
+  syncBackupToSupabase,
+  parseBackupFile
+} from '../utils/backupManager';
 
 interface StoreContextType {
   // Products
@@ -133,6 +140,15 @@ interface StoreContextType {
   // Site-wide Password Protection (Optional, Admin-managed)
   isSiteLocked: boolean;
   unlockSite: (password: string) => boolean;
+
+  // Store Logo Management
+  updateStoreLogo: (fileOrUrl: File | string) => Promise<{ success: boolean; url: string }>;
+  resetStoreLogo: () => void;
+
+  // Cloud Backup & Restore
+  exportBackup: () => void;
+  restoreBackup: (file: File) => Promise<{ success: boolean; message: string }>;
+  lastBackupDate: string | null;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -348,6 +364,44 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       authListener?.subscription.unsubscribe();
     };
   }, [adminUsers]);
+
+  // Inactivity watchdog: Auto-logout after 2 hours (120 minutes) of total idle time
+  const INACTIVITY_TIMEOUT_MS = 120 * 60 * 1000;
+
+  useEffect(() => {
+    if (!isAdminLoggedIn) return;
+
+    let timeoutId: any;
+
+    const resetInactivityTimer = () => {
+      const now = Date.now();
+      localStorage.setItem('zekra_admin_last_activity', now.toString());
+
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        logoutAdmin();
+        setAuthError('تم إنهاء جلسة الأدمن تلقائياً بسبب فترة خمول طويلة (ساعتان) لأمان المتجر.');
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    // Check if previously expired while away
+    const lastActivity = parseInt(localStorage.getItem('zekra_admin_last_activity') || '0', 10);
+    if (lastActivity && Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS) {
+      logoutAdmin();
+      setAuthError('انتهت صلاحية جلسة الأدمن السابقة بسبب عدم النشاط.');
+      return;
+    }
+
+    resetInactivityTimer();
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach((ev) => window.addEventListener(ev, resetInactivityTimer, { passive: true }));
+
+    return () => {
+      clearTimeout(timeoutId);
+      activityEvents.forEach((ev) => window.removeEventListener(ev, resetInactivityTimer));
+    };
+  }, [isAdminLoggedIn]);
 
   // Apply Theme CSS Variables dynamically whenever themeSettings change
   useEffect(() => {
@@ -850,6 +904,81 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return true;
   };
 
+  // Store Logo Management with real compression & cloud upload
+  const updateStoreLogo = async (fileOrUrl: File | string): Promise<{ success: boolean; url: string }> => {
+    try {
+      if (typeof fileOrUrl === 'string') {
+        const cleanUrl = fileOrUrl.trim();
+        updateStoreSettings({ logoUrl: cleanUrl });
+        return { success: true, url: cleanUrl };
+      }
+
+      // Compress and upload to Supabase / Cloud
+      const result = await uploadImageToCloudStorage(fileOrUrl, 'logos', 'store_logo');
+      updateStoreSettings({ logoUrl: result.url });
+      return { success: true, url: result.url };
+    } catch (err: any) {
+      console.error('Error updating store logo:', err);
+      return { success: false, url: '' };
+    }
+  };
+
+  const resetStoreLogo = () => {
+    updateStoreSettings({ logoUrl: '/store-logo.svg' });
+  };
+
+  // Cloud & Local Backup Management
+  const [lastBackupDate, setLastBackupDate] = useState<string | null>(() => {
+    return localStorage.getItem('zekra_last_backup_date');
+  });
+
+  const exportBackup = () => {
+    const snapshot = createBackupSnapshot({
+      categories,
+      products,
+      orders,
+      deliveryOptions,
+      announcements: advertisements,
+      promotionalVideos,
+      socialLinks,
+      storeSettings,
+      themeSettings,
+      adminUsers
+    });
+
+    downloadBackupAsFile(snapshot);
+    syncBackupToSupabase(snapshot);
+    const dateStr = new Date().toISOString();
+    setLastBackupDate(dateStr);
+    localStorage.setItem('zekra_last_backup_date', dateStr);
+  };
+
+  const restoreBackup = async (file: File): Promise<{ success: boolean; message: string }> => {
+    try {
+      const payload = await parseBackupFile(file);
+      if (payload.data.categories) setCategories(payload.data.categories);
+      if (payload.data.products) setProducts(payload.data.products);
+      if (payload.data.orders) setOrders(payload.data.orders);
+      if (payload.data.deliveryOptions) setDeliveryOptions(payload.data.deliveryOptions);
+      if (payload.data.announcements) setAdvertisements(payload.data.announcements);
+      if (payload.data.promotionalVideos) setPromotionalVideos(payload.data.promotionalVideos);
+      if (payload.data.socialLinks) setSocialLinks(payload.data.socialLinks);
+      if (payload.data.storeSettings) setStoreSettings(payload.data.storeSettings);
+      if (payload.data.themeSettings) setThemeSettings(payload.data.themeSettings);
+      if (payload.data.adminUsers) setAdminUsers(payload.data.adminUsers);
+
+      return {
+        success: true,
+        message: `تمت استعادة النسخة الاحتياطية بنجاح! تاريخ النسخة: ${new Date(payload.timestamp).toLocaleString('ar-IQ')}`
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'فشلت عملية استعادة النسخة الاحتياطية'
+      };
+    }
+  };
+
   return (
     <StoreContext.Provider
       value={{
@@ -917,7 +1046,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         deleteAdminUser,
         toggleAdminUserActive,
         isSiteLocked,
-        unlockSite
+        unlockSite,
+        updateStoreLogo,
+        resetStoreLogo,
+        exportBackup,
+        restoreBackup,
+        lastBackupDate
       }}
     >
       {children}

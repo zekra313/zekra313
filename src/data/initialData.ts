@@ -363,7 +363,7 @@ export const INITIAL_STORE_SETTINGS: StoreSettings = {
   address: 'العراق - بغداد - الكرادة - شارع 14 رمضان',
   workingHours: 'يومياً من 9:00 صباحاً حتى 11:00 مساءً',
   currency: 'د.ع',
-  logoUrl: '',
+  logoUrl: '/store-logo.svg',
   siteProtection: {
     enabled: false,
     password: '',

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
+import { StoreLogo } from './StoreLogo';
 import { getSupabase, getStoredSupabaseConfig, saveSupabaseConfig } from '../lib/supabase';
 import {
   X,
@@ -31,7 +32,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     verifyAndLoginAdminEmail,
     authError,
     clearAuthError,
-    adminUsers
+    adminUsers,
+    storeSettings
   } = useStore();
 
   const [testEmail, setTestEmail] = useState('');
@@ -135,11 +137,16 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             <X className="w-5 h-5" />
           </button>
 
-          <div className="w-14 h-14 rounded-2xl bg-amber-400 text-stone-950 flex items-center justify-center mx-auto mb-3 shadow-lg">
-            <ShieldCheck className="w-7 h-7" />
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <div className="w-14 h-14 rounded-2xl bg-white p-1.5 flex items-center justify-center shadow-lg">
+              <StoreLogo customUrl={storeSettings.logoUrl} className="w-full h-full" />
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-amber-400 text-stone-950 flex items-center justify-center shadow-md">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
           </div>
 
-          <h2 className="text-xl font-black">بوابة إدارة "ذكرى للطباعة"</h2>
+          <h2 className="text-xl font-black">{storeSettings.storeName}</h2>
           <p className="text-xs text-amber-200 mt-1">
             تسجيل دخول الأدمن حصرياً عبر Google مع Supabase Auth
           </p>

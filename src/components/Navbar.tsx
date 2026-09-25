@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
+import { StoreLogo } from './StoreLogo';
 import {
   ShoppingBag,
   Heart,
@@ -61,11 +62,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               }}
               className="text-right group flex items-center gap-2.5 focus:outline-none"
             >
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xs transition-transform group-hover:scale-105"
-                style={{ backgroundColor: 'var(--primary-color, #1e3a2b)' }}
-              >
-                <Sparkles className="w-5 h-5 text-amber-300" />
+              <div className="w-11 h-11 rounded-2xl bg-white border border-stone-200 p-1 flex items-center justify-center shadow-xs transition-transform group-hover:scale-105 overflow-hidden">
+                <StoreLogo customUrl={storeSettings.logoUrl} className="w-full h-full" />
               </div>
               <div>
                 <span className="block text-xl md:text-2xl font-bold tracking-tight text-stone-900 group-hover:text-stone-700 transition-colors">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Order } from '../types';
 import { useStore } from '../context/StoreContext';
+import { StoreLogo } from './StoreLogo';
 import {
   X,
   Printer,
@@ -67,12 +68,9 @@ export const DigitalInvoiceModal: React.FC<DigitalInvoiceModalProps> = ({ order,
           {/* Invoice Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pb-6 border-b-2 border-stone-900">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white"
-                  style={{ backgroundColor: 'var(--primary-color, #1e3a2b)' }}
-                >
-                  <Sparkles className="w-4 h-4 text-amber-300" />
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-white border border-stone-200 p-1 flex items-center justify-center shadow-xs">
+                  <StoreLogo customUrl={storeSettings.logoUrl} className="w-full h-full" />
                 </div>
                 <h1 className="text-2xl font-black tracking-tight text-stone-900">
                   {storeSettings.storeName}

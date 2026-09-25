@@ -40,8 +40,16 @@ import {
   RefreshCw,
   Phone,
   MapPin,
-  Clock
+  Clock,
+  Upload,
+  Image,
+  Download,
+  HardDrive,
+  Cloud,
+  ShieldCheck,
+  Key
 } from 'lucide-react';
+import { StoreLogo } from './StoreLogo';
 import { formatIQD, formatArabicDate } from '../utils/formatters';
 import { SUPABASE_SQL_SCHEMA, saveSupabaseConfig, getStoredSupabaseConfig } from '../lib/supabase';
 
@@ -119,8 +127,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     adminUsers,
     addAdminUser,
     deleteAdminUser,
-    toggleAdminUserActive
+    toggleAdminUserActive,
+    updateStoreLogo,
+    resetStoreLogo,
+    exportBackup,
+    restoreBackup,
+    lastBackupDate
   } = useStore();
+
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoNotice, setLogoNotice] = useState('');
+  const [backupNotice, setBackupNotice] = useState('');
+  const [restoreLoading, setRestoreLoading] = useState(false);
 
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminName, setNewAdminName] = useState('');
@@ -1455,6 +1473,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'theme' && (
             <div className="space-y-6">
               
+              {/* Store Logo Management Section */}
+              <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-5">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-stone-100 pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-stone-900 text-sm flex items-center gap-2">
+                      <Image className="w-4 h-4 text-amber-600" />
+                      <span>شعار المتجر الرسمي (Store Logo)</span>
+                    </h3>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      تغيير أو تحديث شعار "ذكرى للطباعة" مع ضغط تلقائي وحفظ في التخزين السحابي
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetStoreLogo}
+                    className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                  >
+                    استعادة الشعار الأصلي (شعار ذكرى)
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-6 p-4 bg-stone-50 rounded-2xl border border-stone-200">
+                  {/* Current Logo Preview */}
+                  <div className="w-28 h-28 rounded-2xl bg-white border-2 border-stone-300 p-2 flex items-center justify-center shadow-sm shrink-0">
+                    <StoreLogo customUrl={storeSettings.logoUrl} className="w-full h-full" />
+                  </div>
+
+                  <div className="flex-1 space-y-3 w-full text-right">
+                    <div className="space-y-1">
+                      <span className="font-bold text-xs text-stone-800 block">
+                        رفع شعار جديد (PNG, JPG, SVG, WebP):
+                      </span>
+                      <p className="text-[11px] text-stone-500">
+                        يتم ضغط الصورة تلقائياً لسرعة تحميل فائقة وتخزينها في السحابة.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="cursor-pointer px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{logoUploading ? 'جاري ضغط ورفع الشعار...' : 'اختيار صورة الشعار من جهازك'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={logoUploading}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setLogoUploading(true);
+                            setLogoNotice('');
+                            const res = await updateStoreLogo(file);
+                            setLogoUploading(false);
+                            if (res.success) {
+                              setLogoNotice('✓ تم ضغط الشعار ورفعه بنجاح للمتجر!');
+                              setTimeout(() => setLogoNotice(''), 3000);
+                            } else {
+                              setLogoNotice('تعذر تحديث الشعار، يرجى تجربة صورة أخرى');
+                            }
+                          }}
+                        />
+                      </label>
+
+                      {logoNotice && (
+                        <span className="text-xs font-bold text-emerald-700 animate-fadeIn">
+                          {logoNotice}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Direct URL input fallback */}
+                    <div className="pt-2 border-t border-stone-200 flex items-center gap-2">
+                      <input
+                        type="url"
+                        dir="ltr"
+                        placeholder="أو ضع رابط الشعار المباشر (https://...)"
+                        value={storeSettings.logoUrl || ''}
+                        onChange={(e) => updateStoreSettings({ logoUrl: e.target.value })}
+                        className="flex-1 p-2 text-xs bg-white border border-stone-300 rounded-xl font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Theme Customization Section */}
               <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-5">
                 <div className="flex justify-between items-center">
@@ -1858,7 +1961,145 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* 2. Privacy & Search Engine Indexing Protection */}
+              {/* 2. Google Cloud Console & Supabase Auth OAuth 2.0 Integration */}
+              <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-stone-100 pb-3">
+                  <div>
+                    <h4 className="font-extrabold text-stone-900 text-sm flex items-center gap-2">
+                      <Key className="w-4 h-4 text-amber-600" />
+                      <span>ربط Google OAuth 2.0 عبر Google Cloud Console و Supabase Auth</span>
+                    </h4>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      لتمكين تسجيل الدخول الحقيقي بحساب Google ونافذة اختيار الحسابات الرسمية
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                    Google Cloud Console OAuth
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs text-stone-600">
+                  <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
+                    <span className="font-bold text-stone-800 block">خطوات الربط الحقيقي في منصة Google:</span>
+                    <ol className="list-decimal list-inside space-y-1.5 leading-relaxed text-stone-700">
+                      <li>
+                        ادخل إلى <strong>Google Cloud Console</strong> ثم توجه إلى <strong>APIs & Services ➔ Credentials</strong>.
+                      </li>
+                      <li>
+                        اضغط على <strong>Create Credentials</strong> واختر <strong>OAuth 2.0 Client ID</strong> (نوع التطبيق: Web application).
+                      </li>
+                      <li>
+                        في خانة <strong>Authorized JavaScript origins</strong> أضف الرابط:
+                        <code className="block mt-1 p-1.5 bg-white border border-stone-300 rounded font-mono text-stone-900 select-all" dir="ltr">
+                          https://zekra313.github.io
+                        </code>
+                      </li>
+                      <li>
+                        في خانة <strong>Authorized redirect URIs</strong> أضف رابط ارتداد Supabase الخاص بمشروعك:
+                        <code className="block mt-1 p-1.5 bg-white border border-stone-300 rounded font-mono text-stone-900 select-all" dir="ltr">
+                          https://[YOUR_SUPABASE_PROJECT_REF].supabase.co/auth/v1/callback
+                        </code>
+                      </li>
+                      <li>
+                        انسخ <strong>Client ID</strong> و <strong>Client Secret</strong> من Google وضعها في لوحة تحكم Supabase في مسار:
+                        <br />
+                        <span className="font-semibold text-emerald-800">Supabase Dashboard ➔ Authentication ➔ Providers ➔ Google</span> وفعل الخيار.
+                      </li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Cloud Storage & Automated Backup System */}
+              <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-5">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-stone-100 pb-3">
+                  <div>
+                    <h4 className="font-extrabold text-stone-900 text-sm flex items-center gap-2">
+                      <Cloud className="w-4 h-4 text-emerald-700" />
+                      <span>التخزين السحابي والنسخ الاحتياطي التلقائي (Cloud Storage & Backup)</span>
+                    </h4>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      حفظ صور المنتجات والإعلانات والشعار، وأخذ نسخ احتياطية شاملة لقاعدة البيانات والطلبات
+                    </p>
+                  </div>
+                  {lastBackupDate && (
+                    <span className="text-[11px] text-stone-500 font-medium">
+                      آخر نسخة احتياطية: <strong>{new Date(lastBackupDate).toLocaleDateString('ar-IQ')}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Backup Card */}
+                  <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-3 text-xs">
+                    <div className="flex items-center gap-2 font-bold text-stone-800">
+                      <Download className="w-4 h-4 text-emerald-700" />
+                      <span>تصدير نسخة احتياطية فورية (Export JSON):</span>
+                    </div>
+                    <p className="text-stone-600 text-[11px] leading-relaxed">
+                      يقوم بإنشاء لقطة مشفرة وشاملة لكافة المنتجات، الطلبات، المحادثات، المشرفين، وإعدادات المتجر وحفظها محلياً وسحابياً.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        exportBackup();
+                        setBackupNotice('✓ تم تنزيل النسخة الاحتياطية بنجاح ومزامنتها سحابياً!');
+                        setTimeout(() => setBackupNotice(''), 3500);
+                      }}
+                      className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>تصدير وتحميل النسخة الاحتياطية الآن</span>
+                    </button>
+                    {backupNotice && (
+                      <div className="p-2 bg-emerald-100 text-emerald-900 font-bold rounded-lg text-center">
+                        {backupNotice}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Restore Card */}
+                  <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-3 text-xs">
+                    <div className="flex items-center gap-2 font-bold text-stone-800">
+                      <HardDrive className="w-4 h-4 text-amber-600" />
+                      <span>استعادة نسخة احتياطية سابقة (Restore):</span>
+                    </div>
+                    <p className="text-stone-600 text-[11px] leading-relaxed">
+                      في حال الرغبة في استرجاع متجرك لحالة سابقة، اختر ملف النسخة الاحتياطية (.json) ليتم استرجاع كامل البيانات.
+                    </p>
+                    <label className="w-full py-2.5 px-4 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer">
+                      <Upload className="w-4 h-4" />
+                      <span>{restoreLoading ? 'جاري فحص واستعادة البيانات...' : 'اختيار ملف النسخة الاحتياطية لاستعادتها'}</span>
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        disabled={restoreLoading}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (!confirm('هل أنت متأكد من استعادة هذه النسخة؟ سيتم تحديث بيانات المتجر للنسخة المحددة.')) return;
+                          setRestoreLoading(true);
+                          const res = await restoreBackup(file);
+                          setRestoreLoading(false);
+                          alert(res.message);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Cloud Storage Bucket Specs */}
+                <div className="p-3 bg-stone-100 rounded-xl text-[11px] text-stone-600 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>حاوية التخزين السحابي: <strong>zekra-media</strong> (صور المنتجات، الشعار، الإعلانات)</span>
+                  </div>
+                  <span className="text-stone-500 font-semibold">ضغط تلقائي بصيغة WebP خفيفة وفائقة الدقة</span>
+                </div>
+              </div>
+
+              {/* 4. Privacy & Search Engine Indexing Protection */}
               <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-4">
                 <div>
                   <h4 className="font-extrabold text-stone-900 text-sm">

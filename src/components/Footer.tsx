@@ -1,5 +1,6 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
+import { StoreLogo } from './StoreLogo';
 import { Sparkles, MapPin, Phone, Clock, Mail, ShieldCheck, Truck } from 'lucide-react';
 
 interface FooterProps {
@@ -25,11 +26,8 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Brand Info (Right in RTL) */}
           <div className="lg:col-span-5 space-y-4">
             <div className="flex items-center gap-2.5">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-white"
-                style={{ backgroundColor: 'var(--primary-color, #1e3a2b)' }}
-              >
-                <Sparkles className="w-5 h-5 text-amber-300" />
+              <div className="w-12 h-12 rounded-2xl bg-white p-1 flex items-center justify-center shadow-md">
+                <StoreLogo customUrl={storeSettings.logoUrl} className="w-full h-full" />
               </div>
               <div>
                 <span className="text-xl font-black text-white">{storeSettings.storeName}</span>
