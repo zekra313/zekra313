@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Background is transparent -->
+  <!-- Outer Broken Circle Arc -->
+  <path
+    d="M 195 385 A 160 160 0 1 1 305 385"
+    fill="none"
+    stroke="#000000"
+    stroke-width="14"
+    stroke-linecap="round"
+  />
+
+  <!-- Arabic Letter Dhal (ذ) Calligraphy Body -->
+  <!-- Diamond Dot above the letter -->
+  <rect
+    x="238"
+    y="135"
+    width="24"
+    height="24"
+    rx="3"
+    transform="rotate(45 250 147)"
+    fill="#000000"
+  />
+
+  <!-- The elegant curve of Dhal (ذ) -->
+  <path
+    d="M 238 185 C 248 205, 275 240, 275 270 C 275 305, 245 325, 215 348 C 240 348, 270 338, 290 318 C 298 310, 302 298, 298 288 C 294 278, 282 278, 275 285 C 265 295, 250 310, 225 318 C 210 322, 202 312, 202 300 C 202 280, 218 245, 238 185 Z"
+    fill="#000000"
+  />
+
+  <!-- Secondary Artistic Sweep of Dhal -->
+  <path
+    d="M 242 188 C 235 220, 205 270, 200 300 C 196 324, 210 342, 235 342 C 260 342, 295 320, 302 285 C 298 295, 280 325, 240 325 C 220 325, 212 315, 214 300 C 218 275, 245 225, 252 188 Z"
+    fill="#000000"
+  />
+
+  <!-- Bottom Brand Text Line: — ذكرى للطباعة — -->
+  <!-- Left Dash Line -->
+  <line x1="80" y1="425" x2="135" y2="425" stroke="#000000" stroke-width="6" stroke-linecap="round" />
+
+  <!-- Center Text -->
+  <text
+    x="250"
+    y="435"
+    text-anchor="middle"
+    font-family="'Cairo', 'Tajawal', 'IBM Plex Sans Arabic', sans-serif"
+    font-size="34"
+    font-weight="900"
+    fill="#000000"
+    letter-spacing="0.5"
+  >ذكرى للطباعة</text>
+
+  <!-- Right Dash Line -->
+  <line x1="365" y1="425" x2="420" y2="425" stroke="#000000" stroke-width="6" stroke-linecap="round" />
+</svg>
