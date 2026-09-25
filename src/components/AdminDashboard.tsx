@@ -1995,10 +1995,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </code>
                       </li>
                       <li>
-                        في خانة <strong>Authorized redirect URIs</strong> أضف رابط ارتداد Supabase الخاص بمشروعك:
-                        <code className="block mt-1 p-1.5 bg-white border border-stone-300 rounded font-mono text-stone-900 select-all" dir="ltr">
-                          https://[YOUR_SUPABASE_PROJECT_REF].supabase.co/auth/v1/callback
-                        </code>
+                        في خانة <strong>Authorized redirect URIs</strong> أضف الروابط التالية (رابط Supabase ورابط موقعك المباشر):
+                        <div className="space-y-2 mt-1.5">
+                          <div className="p-2 bg-white border border-stone-300 rounded-xl space-y-1">
+                            <span className="text-[10px] text-stone-500 font-bold block">1. رابط موقعك المباشر على GitHub Pages:</span>
+                            <div className="flex items-center justify-between gap-2">
+                              <code className="font-mono text-emerald-800 text-[11px] select-all font-bold" dir="ltr">
+                                https://zekra313.github.io/zekra313/
+                              </code>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText('https://zekra313.github.io/zekra313/');
+                                  alert('تم نسخ رابط الموقع بنجاح!');
+                                }}
+                                className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>نسخ</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="p-2 bg-white border border-stone-300 rounded-xl space-y-1">
+                            <span className="text-[10px] text-stone-500 font-bold block">2. رابط ارتداد Supabase الخاص بمشروعك (Callback URL):</span>
+                            <div className="flex items-center justify-between gap-2">
+                              <code className="font-mono text-stone-900 text-[11px] select-all" dir="ltr">
+                                https://[YOUR_SUPABASE_PROJECT_REF].supabase.co/auth/v1/callback
+                              </code>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const cfg = getStoredSupabaseConfig();
+                                  if (cfg.url) {
+                                    const callbackUrl = `${cfg.url.replace(/\/$/, '')}/auth/v1/callback`;
+                                    navigator.clipboard.writeText(callbackUrl);
+                                    alert(`تم نسخ رابط Supabase Callback:\n${callbackUrl}`);
+                                  } else {
+                                    navigator.clipboard.writeText('https://[YOUR_SUPABASE_PROJECT_REF].supabase.co/auth/v1/callback');
+                                    alert('يرجى استبدال [YOUR_SUPABASE_PROJECT_REF] بكود مشروعك في Supabase');
+                                  }
+                                }}
+                                className="px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>نسخ</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </li>
                       <li>
                         انسخ <strong>Client ID</strong> و <strong>Client Secret</strong> من Google وضعها في لوحة تحكم Supabase في مسار:
