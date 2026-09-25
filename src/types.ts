@@ -155,6 +155,21 @@ export interface ThemeSettings {
   buttonTextColor: string; // e.g. #ffffff
 }
 
+export interface SiteProtectionSettings {
+  enabled: boolean;
+  password?: string;
+  hint?: string;
+}
+
+export interface AdminUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  role: 'super_admin' | 'admin' | 'editor';
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface StoreSettings {
   storeName: string;
   storeTagline: string;
@@ -166,4 +181,6 @@ export interface StoreSettings {
   workingHours: string;
   currency: string;
   logoUrl?: string;
+  siteProtection?: SiteProtectionSettings;
 }
+

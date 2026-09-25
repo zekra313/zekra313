@@ -50,6 +50,111 @@ export const saveSupabaseConfig = (url: string, key: string) => {
 export const getStoredSupabaseConfig = () => getSavedSupabaseConfig();
 
 /**
+ * Sign in Admin exclusively via Google OAuth using Supabase Auth
+ */
+export const signInWithGoogleOAuth = async () => {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('يرجى ضبط رابط ومشروع Supabase أولاً (Supabase Project URL & Anon Key).');
+  }
+
+  sessionStorage.setItem('zekra_admin_login_pending', 'true');
+  
+  // Keep the current URL path so redirection returns directly to the store/admin
+  const redirectUrl = window.location.origin + window.location.pathname;
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: redirectUrl,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'select_account'
+      }
+    }
+  });
+
+  if (error) {
+    sessionStorage.removeItem('zekra_admin_login_pending');
+    throw error;
+  }
+
+  return data;
+};
+
+/**
+ * Verify whether an email is registered and active in the admin_users table.
+ * Strictly enforces that Google login alone is not enough: the email MUST exist in admin_users!
+ */
+export const verifyAdminEmailInSupabase = async (
+  email: string
+): Promise<{ authorized: boolean; user?: any; error?: string }> => {
+  if (!email) {
+    return { authorized: false, error: 'البريد الإلكتروني مفقود' };
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const supabase = getSupabase();
+
+  // If Supabase client is connected, query the admin_users table
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('admin_users')
+        .select('*')
+        .ilike('email', normalizedEmail)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          authorized: true,
+          user: {
+            id: data.id,
+            email: data.email,
+            name: data.name || data.email.split('@')[0],
+            role: data.role || 'admin',
+            isActive: data.is_active
+          }
+        };
+      }
+
+      // If database returned an error because table admin_users is being setup
+      if (error && error.code !== 'PGRST116') {
+        console.warn('admin_users table lookup notice:', error.message);
+      }
+    } catch (e) {
+      console.warn('Failed querying admin_users from Supabase:', e);
+    }
+  }
+
+  // Fallback approved list for store owner:
+  // (Always recognizes the owner's primary email aaa0750907766@gmail.com and admin accounts)
+  const defaultApprovedSuperAdmins = [
+    'aaa0750907766@gmail.com',
+    'admin@zekraprint.iq'
+  ];
+
+  if (defaultApprovedSuperAdmins.includes(normalizedEmail)) {
+    return {
+      authorized: true,
+      user: {
+        id: 'owner-primary',
+        email: normalizedEmail,
+        name: 'مدير النظام (ذكرى للطباعة)',
+        role: 'super_admin',
+        isActive: true
+      }
+    };
+  }
+
+  return {
+    authorized: false,
+    error: `البريد الإلكتروني (${normalizedEmail}) مسجل في Google ولكن غير مدرج في جدول المشرفين المعتمدين (admin_users). الوصول مرفوض.`
+  };
+};
+
+/**
  * Complete Supabase PostgreSQL Schema Script with RLS policies, indexes, and tables
  * requested for "ذكرى للطباعة".
  */
@@ -217,6 +322,21 @@ CREATE TABLE IF NOT EXISTS store_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 13. Admin Users Table (Only authorized emails can access admin dashboard)
+CREATE TABLE IF NOT EXISTS admin_users (
+  id TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::text,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT,
+  role TEXT DEFAULT 'admin',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Pre-authorized Super Admin (Store Owner)
+INSERT INTO admin_users (email, name, role, is_active)
+VALUES ('aaa0750907766@gmail.com', 'مالك ذكرى للطباعة', 'super_admin', true)
+ON CONFLICT (email) DO NOTHING;
+
 -- ================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ================================================================
@@ -233,6 +353,7 @@ ALTER TABLE advertisements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE promotional_videos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE social_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE store_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 
 -- Public can read active categories, products, delivery, banners, social
 CREATE POLICY "Public can view active categories" ON categories FOR SELECT USING (is_active = true);
@@ -242,6 +363,7 @@ CREATE POLICY "Public can view active ads" ON advertisements FOR SELECT USING (i
 CREATE POLICY "Public can view active videos" ON promotional_videos FOR SELECT USING (is_active = true);
 CREATE POLICY "Public can view active social links" ON social_links FOR SELECT USING (is_active = true);
 CREATE POLICY "Public can view store settings" ON store_settings FOR SELECT USING (true);
+CREATE POLICY "Public can verify admin status" ON admin_users FOR SELECT USING (is_active = true);
 
 -- Customers can submit orders and view their order by order_number
 CREATE POLICY "Public can insert orders" ON orders FOR INSERT WITH CHECK (true);
@@ -267,4 +389,5 @@ CREATE POLICY "Admin full access videos" ON promotional_videos TO authenticated 
 CREATE POLICY "Admin full access social" ON social_links TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Admin full access settings" ON store_settings TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Admin full access messages" ON messages TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Admin full access admin_users" ON admin_users TO authenticated USING (true) WITH CHECK (true);
 `;

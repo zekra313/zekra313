@@ -12,7 +12,8 @@ import {
   PromotionalVideo,
   SocialLink,
   StoreSettings,
-  ThemeSettings
+  ThemeSettings,
+  AdminUserRecord
 } from '../types';
 import {
   INITIAL_CATEGORIES,
@@ -24,8 +25,14 @@ import {
   INITIAL_STORE_SETTINGS,
   INITIAL_THEME_SETTINGS,
   INITIAL_SAMPLE_ORDERS,
-  INITIAL_CONVERSATIONS
+  INITIAL_CONVERSATIONS,
+  INITIAL_ADMIN_USERS
 } from '../data/initialData';
+import {
+  getSupabase,
+  verifyAdminEmailInSupabase,
+  signInWithGoogleOAuth
+} from '../lib/supabase';
 
 interface StoreContextType {
   // Products
@@ -108,11 +115,24 @@ interface StoreContextType {
   updateThemeSettings: (updates: Partial<ThemeSettings>) => void;
   resetThemeSettings: () => void;
 
-  // Admin Auth
+  // Admin Auth (Exclusively Google via Supabase Auth + admin_users whitelist check)
   isAdminLoggedIn: boolean;
-  adminUser: { name: string; email: string; avatarUrl?: string } | null;
-  loginAdmin: (method: 'google' | 'supabase' | 'demo', email?: string) => void;
-  logoutAdmin: () => void;
+  adminUser: { name: string; email: string; avatarUrl?: string; role?: string } | null;
+  authError: string | null;
+  clearAuthError: () => void;
+  loginAdminWithGoogle: () => Promise<void>;
+  verifyAndLoginAdminEmail: (email: string) => Promise<{ success: boolean; message: string }>;
+  logoutAdmin: () => Promise<void>;
+
+  // Admin Users Whitelist Management (admin_users table)
+  adminUsers: AdminUserRecord[];
+  addAdminUser: (email: string, name: string, role?: 'super_admin' | 'admin' | 'editor') => Promise<boolean>;
+  deleteAdminUser: (id: string) => Promise<boolean>;
+  toggleAdminUserActive: (id: string) => Promise<boolean>;
+
+  // Site-wide Password Protection (Optional, Admin-managed)
+  isSiteLocked: boolean;
+  unlockSite: (password: string) => boolean;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -188,10 +208,146 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('zekra_admin_auth') === 'true';
   });
-  const [adminUser, setAdminUser] = useState<{ name: string; email: string; avatarUrl?: string } | null>(() => {
+  const [adminUser, setAdminUser] = useState<{ name: string; email: string; avatarUrl?: string; role?: string } | null>(() => {
     const saved = localStorage.getItem('zekra_admin_user');
     return saved ? JSON.parse(saved) : null;
   });
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Admin Users Whitelist State (admin_users table)
+  const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>(() => {
+    return loadFromStorage('zekra_admin_users', INITIAL_ADMIN_USERS);
+  });
+
+  // Site Protection State (Optional Admin-managed)
+  const [siteUnlocked, setSiteUnlocked] = useState<boolean>(() => {
+    return sessionStorage.getItem('zekra_site_unlocked') === 'true';
+  });
+
+  // Check if site is locked for public visitor
+  const isSiteLocked = Boolean(
+    storeSettings.siteProtection?.enabled &&
+    !siteUnlocked &&
+    !isAdminLoggedIn
+  );
+
+  const unlockSite = (password: string): boolean => {
+    const targetPassword = storeSettings.siteProtection?.password || '';
+    if (password.trim() === targetPassword.trim()) {
+      setSiteUnlocked(true);
+      sessionStorage.setItem('zekra_site_unlocked', 'true');
+      return true;
+    }
+    return false;
+  };
+
+  // Sync admin users to localStorage
+  useEffect(() => {
+    saveToStorage('zekra_admin_users', adminUsers);
+  }, [adminUsers]);
+
+  // Supabase Auth Listener & OAuth Callback Handler
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    // Check existing Supabase session upon loading or after Google OAuth redirect
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error) {
+        console.warn('Error reading Supabase auth session:', error);
+        return;
+      }
+
+      if (session?.user?.email) {
+        const userEmail = session.user.email;
+        // Verify against admin_users whitelist
+        const check = await verifyAdminEmailInSupabase(userEmail);
+
+        // Also check local adminUsers state
+        const localApproved = adminUsers.find(
+          u => u.email.toLowerCase() === userEmail.toLowerCase() && u.isActive
+        );
+
+        if (check.authorized || localApproved) {
+          const role = check.user?.role || localApproved?.role || 'admin';
+          const name = check.user?.name || localApproved?.name || session.user.user_metadata?.full_name || userEmail.split('@')[0];
+          const avatarUrl = session.user.user_metadata?.avatar_url || '';
+
+          const authorizedUser = {
+            name,
+            email: userEmail,
+            avatarUrl,
+            role
+          };
+
+          setIsAdminLoggedIn(true);
+          setAdminUser(authorizedUser);
+          localStorage.setItem('zekra_admin_auth', 'true');
+          localStorage.setItem('zekra_admin_user', JSON.stringify(authorizedUser));
+          setAuthError(null);
+        } else {
+          // Access Denied: User logged into Google, but email is NOT in admin_users!
+          await supabase.auth.signOut();
+          setIsAdminLoggedIn(false);
+          setAdminUser(null);
+          localStorage.removeItem('zekra_admin_auth');
+          localStorage.removeItem('zekra_admin_user');
+          setAuthError(
+            `عذراً! البريد الإلكتروني (${userEmail}) غير مصرح له بالدخول. يجب إدراجه مسبقاً في جدول المشرفين (admin_users) حتى يتمكن من الوصول للوحة التحكم.`
+          );
+        }
+      }
+    });
+
+    // Listen to Auth State changes (e.g. when OAuth callback finishes in browser)
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user?.email) {
+        const userEmail = session.user.email;
+        const check = await verifyAdminEmailInSupabase(userEmail);
+        const localApproved = adminUsers.find(
+          u => u.email.toLowerCase() === userEmail.toLowerCase() && u.isActive
+        );
+
+        if (check.authorized || localApproved) {
+          const role = check.user?.role || localApproved?.role || 'admin';
+          const name = check.user?.name || localApproved?.name || session.user.user_metadata?.full_name || userEmail.split('@')[0];
+          const avatarUrl = session.user.user_metadata?.avatar_url || '';
+
+          const authorizedUser = {
+            name,
+            email: userEmail,
+            avatarUrl,
+            role
+          };
+
+          setIsAdminLoggedIn(true);
+          setAdminUser(authorizedUser);
+          localStorage.setItem('zekra_admin_auth', 'true');
+          localStorage.setItem('zekra_admin_user', JSON.stringify(authorizedUser));
+          setAuthError(null);
+        } else {
+          // Reject and sign out
+          await supabase.auth.signOut();
+          setIsAdminLoggedIn(false);
+          setAdminUser(null);
+          localStorage.removeItem('zekra_admin_auth');
+          localStorage.removeItem('zekra_admin_user');
+          setAuthError(
+            `الوصول مرفوض: الحساب (${userEmail}) ليس لديه صلاحية الأدمن في جدول admin_users.`
+          );
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setIsAdminLoggedIn(false);
+        setAdminUser(null);
+        localStorage.removeItem('zekra_admin_auth');
+        localStorage.removeItem('zekra_admin_user');
+      }
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [adminUsers]);
 
   // Apply Theme CSS Variables dynamically whenever themeSettings change
   useEffect(() => {
@@ -549,24 +705,149 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setThemeSettings(INITIAL_THEME_SETTINGS);
   };
 
-  // Admin Auth
-  const loginAdmin = (method: 'google' | 'supabase' | 'demo', email?: string) => {
-    setIsAdminLoggedIn(true);
-    const user = {
-      name: method === 'google' ? 'مدير المتجر (Google)' : method === 'supabase' ? 'مشرف النظام (Supabase)' : 'مدير ذكرى للطباعة',
-      email: email || (method === 'google' ? 'admin@zekraprint.iq' : 'admin@zekraprint.iq'),
-      avatarUrl: ''
-    };
-    setAdminUser(user);
-    localStorage.setItem('zekra_admin_auth', 'true');
-    localStorage.setItem('zekra_admin_user', JSON.stringify(user));
+  // Clear Auth Error
+  const clearAuthError = () => setAuthError(null);
+
+  // Admin Auth - Exclusively Google via Supabase Auth
+  const loginAdminWithGoogle = async () => {
+    setAuthError(null);
+    try {
+      await signInWithGoogleOAuth();
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      setAuthError(err?.message || 'تعذر بدء تسجيل الدخول بحساب Google');
+      throw err;
+    }
   };
 
-  const logoutAdmin = () => {
+  // Direct Verification for Google Email against admin_users whitelist
+  const verifyAndLoginAdminEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
+    setAuthError(null);
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Check local adminUsers list
+    const foundLocal = adminUsers.find(
+      u => u.email.toLowerCase() === normalizedEmail && u.isActive
+    );
+
+    // 2. Check Supabase admin_users table
+    const remoteCheck = await verifyAdminEmailInSupabase(normalizedEmail);
+
+    if (foundLocal || remoteCheck.authorized) {
+      const authorizedUser = {
+        name: foundLocal?.name || remoteCheck.user?.name || normalizedEmail.split('@')[0],
+        email: normalizedEmail,
+        avatarUrl: '',
+        role: foundLocal?.role || remoteCheck.user?.role || 'admin'
+      };
+
+      setIsAdminLoggedIn(true);
+      setAdminUser(authorizedUser);
+      localStorage.setItem('zekra_admin_auth', 'true');
+      localStorage.setItem('zekra_admin_user', JSON.stringify(authorizedUser));
+      return { success: true, message: 'تم التحقق بنجاح وتأكيد صلاحية المشرف في جدول admin_users' };
+    }
+
+    const msg = `البريد الإلكتروني (${normalizedEmail}) مسجل في Google ولكن غير مدرج في جدول المشرفين (admin_users). الوصول مرفوض تماماً.`;
+    setAuthError(msg);
+    return { success: false, message: msg };
+  };
+
+  const logoutAdmin = async () => {
+    try {
+      const supabase = getSupabase();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn('Supabase sign out notice:', e);
+    }
     setIsAdminLoggedIn(false);
     setAdminUser(null);
     localStorage.removeItem('zekra_admin_auth');
     localStorage.removeItem('zekra_admin_user');
+  };
+
+  // Manage Admin Users Whitelist
+  const addAdminUser = async (email: string, name: string, role: 'super_admin' | 'admin' | 'editor' = 'admin') => {
+    const normalized = email.toLowerCase().trim();
+    if (!normalized || adminUsers.some(u => u.email.toLowerCase() === normalized)) {
+      return false;
+    }
+
+    const newRecord: AdminUserRecord = {
+      id: 'admin-' + Date.now(),
+      email: normalized,
+      name: name || normalized.split('@')[0],
+      role,
+      isActive: true,
+      createdAt: new Date().toISOString()
+    };
+
+    setAdminUsers(prev => [newRecord, ...prev]);
+
+    // Sync to Supabase if connected
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('admin_users').upsert({
+          email: normalized,
+          name: newRecord.name,
+          role: newRecord.role,
+          is_active: true
+        });
+      } catch (e) {
+        console.warn('Failed syncing new admin to Supabase:', e);
+      }
+    }
+    return true;
+  };
+
+  const deleteAdminUser = async (id: string) => {
+    const target = adminUsers.find(u => u.id === id);
+    if (!target) return false;
+
+    // Prevent deleting owner
+    if (target.email === 'aaa0750907766@gmail.com') {
+      alert('لا يمكن حذف حساب المالك الرئيسي للمتجر');
+      return false;
+    }
+
+    setAdminUsers(prev => prev.filter(u => u.id !== id));
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('admin_users').delete().eq('email', target.email);
+      } catch (e) {
+        console.warn('Failed deleting admin from Supabase:', e);
+      }
+    }
+    return true;
+  };
+
+  const toggleAdminUserActive = async (id: string) => {
+    const target = adminUsers.find(u => u.id === id);
+    if (!target) return false;
+
+    // Prevent deactivating owner
+    if (target.email === 'aaa0750907766@gmail.com') {
+      alert('لا يمكن تعطيل حساب المالك الرئيسي للمتجر');
+      return false;
+    }
+
+    const newStatus = !target.isActive;
+    setAdminUsers(prev => prev.map(u => u.id === id ? { ...u, isActive: newStatus } : u));
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('admin_users').update({ is_active: newStatus }).eq('email', target.email);
+      } catch (e) {
+        console.warn('Failed updating admin in Supabase:', e);
+      }
+    }
+    return true;
   };
 
   return (
@@ -626,8 +907,17 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         resetThemeSettings,
         isAdminLoggedIn,
         adminUser,
-        loginAdmin,
-        logoutAdmin
+        authError,
+        clearAuthError,
+        loginAdminWithGoogle,
+        verifyAndLoginAdminEmail,
+        logoutAdmin,
+        adminUsers,
+        addAdminUser,
+        deleteAdminUser,
+        toggleAdminUserActive,
+        isSiteLocked,
+        unlockSite
       }}
     >
       {children}

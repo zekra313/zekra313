@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { TopAnnouncementBanner } from './components/TopAnnouncementBanner';
 import { Navbar } from './components/Navbar';
@@ -17,6 +17,7 @@ import { Footer } from './components/Footer';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { FavoritesModal } from './components/FavoritesModal';
+import { SitePasswordGate } from './components/SitePasswordGate';
 import { Product, Order } from './types';
 import {
   Sparkles,
@@ -37,7 +38,9 @@ const StorefrontApp: React.FC = () => {
     favorites,
     cartSubtotal,
     isAdminLoggedIn,
-    storeSettings
+    storeSettings,
+    isSiteLocked,
+    unlockSite
   } = useStore();
 
   // Navigation & View States
@@ -58,6 +61,49 @@ const StorefrontApp: React.FC = () => {
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
+
+  // Strict Protection: Check URL for /admin or #admin
+  useEffect(() => {
+    const handleUrlRouteCheck = () => {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      const search = window.location.search.toLowerCase();
+
+      const isAdminRoute = path.endsWith('/admin') ||
+        path.includes('/admin/') ||
+        hash === '#admin' ||
+        search.includes('view=admin') ||
+        search.includes('admin=1');
+
+      if (isAdminRoute) {
+        if (isAdminLoggedIn) {
+          setActiveView('admin');
+        } else {
+          // Immediately redirect unauthorized attempt to login modal
+          // NEVER display admin dashboard or data before verification!
+          setActiveView('store');
+          setIsAdminLoginOpen(true);
+        }
+      }
+    };
+
+    handleUrlRouteCheck();
+    window.addEventListener('hashchange', handleUrlRouteCheck);
+    window.addEventListener('popstate', handleUrlRouteCheck);
+
+    return () => {
+      window.removeEventListener('hashchange', handleUrlRouteCheck);
+      window.removeEventListener('popstate', handleUrlRouteCheck);
+    };
+  }, [isAdminLoggedIn]);
+
+  // If activeView is set to admin but admin is not logged in, enforce redirect
+  useEffect(() => {
+    if (activeView === 'admin' && !isAdminLoggedIn) {
+      setActiveView('store');
+      setIsAdminLoginOpen(true);
+    }
+  }, [activeView, isAdminLoggedIn]);
 
   // Filtered & Sorted Products
   const filteredProducts = useMemo(() => {
@@ -141,6 +187,27 @@ const StorefrontApp: React.FC = () => {
         <DigitalInvoiceModal
           order={invoiceOrder}
           onClose={() => setInvoiceOrder(null)}
+        />
+      </>
+    );
+  }
+
+  // Site-wide Password Gate (if enabled by admin and site is currently locked)
+  if (isSiteLocked) {
+    return (
+      <>
+        <SitePasswordGate
+          onUnlock={unlockSite}
+          storeSettings={storeSettings}
+          onOpenAdmin={() => setIsAdminLoginOpen(true)}
+        />
+        <AdminLoginModal
+          isOpen={isAdminLoginOpen}
+          onClose={() => setIsAdminLoginOpen(false)}
+          onLoginSuccess={() => {
+            setIsAdminLoginOpen(false);
+            setActiveView('admin');
+          }}
         />
       </>
     );

@@ -60,7 +60,8 @@ type AdminTab =
   | 'videos'
   | 'social'
   | 'delivery'
-  | 'theme';
+  | 'theme'
+  | 'security';
 
 const ALL_ORDER_STATUSES: OrderStatus[] = [
   'طلب جديد',
@@ -114,8 +115,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     storeSettings,
     updateStoreSettings,
     adminUser,
-    logoutAdmin
+    logoutAdmin,
+    adminUsers,
+    addAdminUser,
+    deleteAdminUser,
+    toggleAdminUserActive
   } = useStore();
+
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminRole, setNewAdminRole] = useState<'admin' | 'editor'>('admin');
+  const [adminNotice, setAdminNotice] = useState('');
+
+  const [sitePassEnabled, setSitePassEnabled] = useState(
+    storeSettings.siteProtection?.enabled || false
+  );
+  const [sitePassValue, setSitePassValue] = useState(
+    storeSettings.siteProtection?.password || ''
+  );
+  const [sitePassHint, setSitePassHint] = useState(
+    storeSettings.siteProtection?.hint || ''
+  );
+  const [sitePassSavedNotice, setSitePassSavedNotice] = useState(false);
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
 
@@ -582,6 +603,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <Palette className="w-4 h-4" />
               <span>المظهر، الألوان وSupabase</span>
             </div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'security'
+                ? 'bg-stone-900 text-white'
+                : 'text-stone-700 hover:bg-stone-100'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-amber-500" />
+              <span>أمان المشرفين وخصوصية الرابط</span>
+            </div>
+            <span className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-md font-bold">
+              admin_users
+            </span>
           </button>
         </aside>
 
@@ -1631,6 +1669,318 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     {SUPABASE_SQL_SCHEMA}
                   </pre>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 11: SECURITY & PRIVACY SETTINGS */}
+          {activeTab === 'security' && (
+            <div className="space-y-6">
+              
+              {/* Security Header Banner */}
+              <div
+                className="p-6 rounded-2xl text-white space-y-2 relative overflow-hidden"
+                style={{ backgroundColor: 'var(--primary-color, #1e3a2b)' }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-400 text-stone-950 flex items-center justify-center font-bold shadow-md">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black">أمان لوحة التحكم وخصوصية الرابط المباشر</h3>
+                    <p className="text-xs text-amber-200">
+                      تسجيل دخول الأدمن حصرياً عبر Google مع التحقق من جدول admin_users
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 1. Whitelist Management (admin_users) */}
+              <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-5">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-stone-100 pb-3">
+                  <div>
+                    <h4 className="font-extrabold text-stone-900 text-sm flex items-center gap-2">
+                      <span>المشرفون المصرح لهم بالدخول (جدول admin_users)</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                        {adminUsers.length} حسابات معتمدة
+                      </span>
+                    </h4>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      أي تسجيل دخول عبر Google Login لن يُسمح له بفتح لوحة التحكم إلا إذا كان بريده مُدرجاً ومفعلاً هنا.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add New Admin Form */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!newAdminEmail.trim()) return;
+                    const ok = await addAdminUser(newAdminEmail.trim(), newAdminName.trim(), newAdminRole);
+                    if (ok) {
+                      setNewAdminEmail('');
+                      setNewAdminName('');
+                      setAdminNotice('تمت إضافة المشرف بنجاح إلى جدول admin_users');
+                      setTimeout(() => setAdminNotice(''), 3000);
+                    } else {
+                      setAdminNotice('البريد الإلكتروني موجود بالفعل أو غير صالح');
+                      setTimeout(() => setAdminNotice(''), 3000);
+                    }
+                  }}
+                  className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-3 text-xs"
+                >
+                  <span className="font-bold text-stone-800 block">إضافة بريد Google جديد لمشرف المتجر:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-stone-500 mb-1">البريد الإلكتروني (Google Email):</label>
+                      <input
+                        type="email"
+                        dir="ltr"
+                        required
+                        placeholder="example@gmail.com"
+                        value={newAdminEmail}
+                        onChange={(e) => setNewAdminEmail(e.target.value)}
+                        className="w-full p-2 bg-white border border-stone-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-stone-500 mb-1">اسم المشرف:</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: أحمد للمتابعة"
+                        value={newAdminName}
+                        onChange={(e) => setNewAdminName(e.target.value)}
+                        className="w-full p-2 bg-white border border-stone-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-stone-500 mb-1">الدور والصلاحية:</label>
+                      <select
+                        value={newAdminRole}
+                        onChange={(e) => setNewAdminRole(e.target.value as any)}
+                        className="w-full p-2 bg-white border border-stone-300 rounded-xl"
+                      >
+                        <option value="admin">مشرف متجر (Admin)</option>
+                        <option value="editor">معدل منتجات ومحتوى (Editor)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة المشرف لجدول admin_users</span>
+                    </button>
+                    {adminNotice && (
+                      <span className="text-xs font-bold text-emerald-700">{adminNotice}</span>
+                    )}
+                  </div>
+                </form>
+
+                {/* Admins Table */}
+                <div className="overflow-x-auto rounded-xl border border-stone-200">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-stone-100 text-stone-700 font-bold border-b border-stone-200">
+                      <tr>
+                        <th className="p-3">الاسم والصفة</th>
+                        <th className="p-3">بريد Google المعتمد</th>
+                        <th className="p-3">الصلاحية</th>
+                        <th className="p-3">الحالة</th>
+                        <th className="p-3 text-center">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-200 font-medium">
+                      {adminUsers.map((admin) => {
+                        const isOwner = admin.email === 'aaa0750907766@gmail.com';
+                        return (
+                          <tr key={admin.id} className="hover:bg-stone-50">
+                            <td className="p-3 font-bold text-stone-900">
+                              <div className="flex items-center gap-2">
+                                <span>{admin.name}</span>
+                                {isOwner && (
+                                  <span className="bg-amber-100 text-amber-900 text-[10px] px-2 py-0.5 rounded-full font-extrabold border border-amber-300">
+                                    مالك المتجر (Super Admin)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3 font-mono dir-ltr text-stone-700">{admin.email}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[11px] font-semibold">
+                                {admin.role === 'super_admin' ? 'مدير أعلى' : admin.role === 'admin' ? 'مشرف' : 'محرر'}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {admin.isActive ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                  <span>مفعل ومصرح</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-stone-400 font-bold">
+                                  <span className="w-2 h-2 rounded-full bg-stone-300"></span>
+                                  <span>معطل مؤقتاً</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {!isOwner ? (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => toggleAdminUserActive(admin.id)}
+                                    className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg text-[11px] cursor-pointer"
+                                    title={admin.isActive ? 'تعطيل الحساب' : 'تفعيل الحساب'}
+                                  >
+                                    {admin.isActive ? 'تعطيل' : 'تفعيل'}
+                                  </button>
+                                  <button
+                                    onClick={() => deleteAdminUser(admin.id)}
+                                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                    title="حذف المشرف"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-stone-400 font-semibold">حساب أساسي محمي</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 2. Privacy & Search Engine Indexing Protection */}
+              <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-4">
+                <div>
+                  <h4 className="font-extrabold text-stone-900 text-sm">
+                    إجراءات حماية الخصوصية ومنع الفهرسة بمحركات البحث
+                  </h4>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    المتجر مصمم ليعمل كـ "رابط خاص" تشاركه مع زبائنك حصرياً (واتساب، انستغرام، إلخ) بدون فهرسة تلقائية.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                      <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>ملف robots.txt لمنع الزحف</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed font-mono">
+                      User-agent: *<br />
+                      Disallow: /
+                    </p>
+                    <span className="text-[10px] text-emerald-700 block font-semibold">✓ مفعل ونشط في مجلد الموقع</span>
+                  </div>
+
+                  <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                      <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>وسم Meta لمنع الأرشفة</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed font-mono">
+                      &lt;meta name="robots" content="noindex, nofollow"&gt;
+                    </p>
+                    <span className="text-[10px] text-emerald-700 block font-semibold">✓ مضاف في ترويسة HTML</span>
+                  </div>
+
+                  <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                      <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>Google Search Console</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      عدم ربط الموقع بأدوات مشرفي المواقع لحمايته من أي فهرسة عامة تلقائية.
+                    </p>
+                    <span className="text-[10px] text-emerald-700 block font-semibold">✓ خاص بالرابط المباشر فقط</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Site-Wide Password Protection (Optional) */}
+              <div className="p-6 bg-white rounded-2xl border border-stone-200 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-extrabold text-stone-900 text-sm flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-amber-600" />
+                      <span>حماية الموقع برمز مرور عام (Site-Wide Password)</span>
+                    </h4>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      ميزة إضافية اختيارية (مطفأة افتراضياً): تمنع أي زائر من تصفح المتجر إلا بعد كتابة رمز المرور المحدد.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sitePassEnabled}
+                      onChange={(e) => setSitePassEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                  </label>
+                </div>
+
+                {sitePassEnabled && (
+                  <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-3 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                          رمز المرور للدخول إلى المتجر:
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="مثال: zekra2026"
+                          value={sitePassValue}
+                          onChange={(e) => setSitePassValue(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-stone-300 rounded-xl font-mono text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                          تلميح للزبائن (اختياري):
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="مثال: الرمز مرسل لكم عبر واتساب"
+                          value={sitePassHint}
+                          onChange={(e) => setSitePassHint(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-stone-300 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateStoreSettings({
+                        siteProtection: {
+                          enabled: sitePassEnabled,
+                          password: sitePassValue.trim(),
+                          hint: sitePassHint.trim()
+                        }
+                      });
+                      setSitePassSavedNotice(true);
+                      setTimeout(() => setSitePassSavedNotice(false), 2500);
+                    }}
+                    className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    حفظ إعدادات حماية الموقع
+                  </button>
+                  {sitePassSavedNotice && (
+                    <span className="text-xs font-bold text-emerald-700">✓ تم حفظ إعدادات الحماية بنجاح!</span>
+                  )}
                 </div>
               </div>
 

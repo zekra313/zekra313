@@ -363,8 +363,32 @@ export const INITIAL_STORE_SETTINGS: StoreSettings = {
   address: 'العراق - بغداد - الكرادة - شارع 14 رمضان',
   workingHours: 'يومياً من 9:00 صباحاً حتى 11:00 مساءً',
   currency: 'د.ع',
-  logoUrl: ''
+  logoUrl: '',
+  siteProtection: {
+    enabled: false,
+    password: '',
+    hint: ''
+  }
 };
+
+export const INITIAL_ADMIN_USERS: import('../types').AdminUserRecord[] = [
+  {
+    id: 'admin-owner',
+    email: 'aaa0750907766@gmail.com',
+    name: 'مالك المتجر (المدير العام)',
+    role: 'super_admin',
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00Z'
+  },
+  {
+    id: 'admin-system',
+    email: 'admin@zekraprint.iq',
+    name: 'مشرف النظام',
+    role: 'admin',
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00Z'
+  }
+];
 
 export const INITIAL_THEME_SETTINGS: ThemeSettings = {
   primaryColor: '#1e3a2b',
